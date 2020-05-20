@@ -1,5 +1,6 @@
 #include <PubSubClient.h>
 #include <NTPClient.h>
+#include <time.h>
 
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
@@ -11,9 +12,9 @@
 #include "webserver.h"
 
 #define STASSID "Dminty"
-#define STAPSK  "*********"
+#define STAPSK  "000"
 
-#define FW_VER "1.20"
+#define FW_VER "1.25"
 
 ADC_MODE(ADC_VCC);
 
@@ -47,6 +48,29 @@ int distance = 0;
 
 JsnSr04t jsnSr04t;
 
+#define LOCALTIME2STR "%a, %d.%m.%Y %X"  //http://all-ht.ru/inf/prog/c/func/strftime.html
+#define LOCALTIMESTRLENMAX 30
+
+void get_localtime(char* buf){
+
+    unsigned long epochTime = ntpClient.getEpochTime();
+    struct tm *timeinfo = gmtime ((time_t *)&epochTime); 
+
+
+    strftime(buf, LOCALTIMESTRLENMAX, LOCALTIME2STR, timeinfo);
+/*
+    snprintf(buf, LOCALTIMESTRLENMAX, LOCALTIME2STR,  
+                                                        timeinfo.tm_wday,
+                                                        timeinfo.tm_mday,
+                                                        timeinfo.tm_mon,
+                                                        timeinfo.tm_year,
+                                                        timeinfo.tm_hour,
+                                                        timeinfo.tm_min,
+                                                        timeinfo.tm_sec);
+*/
+    //return buf;
+}
+    
 void handleRoot() {
   char temp[WEB_PAGE_SIZE];
   int sec = millis() / 1000;
@@ -61,7 +85,14 @@ void handleRoot() {
   sprintf(temp + strlen(temp), "<h4>FW version: %s</h4>", FW_VER);
   sprintf(temp + strlen(temp), "<p>Freemem: %d</p>", ESP.getFreeHeap());
   sprintf(temp + strlen(temp), "<p>VCC: %d</p>", ESP.getVcc());
-  sprintf(temp + strlen(temp), "<p>Time: %s</p>", ntpClient.getFormattedTime().c_str());
+
+
+  char * buf2 = (char *)malloc(25);
+  get_localtime(buf2);
+  //sprintf(temp + strlen(temp), "<p>Time: %s</p>", ntpClient.getFormattedTime().c_str());
+  sprintf(temp + strlen(temp), "<p>Time: %s</p>", buf2);
+  free(buf2);
+  
   sprintf(temp + strlen(temp), "<p>Uptime: %02d:%02d:%02d</p>", hr, min % 60, sec % 60);
   sprintf(temp + strlen(temp), "<p>Distance: %d.%d cm</p>", (int)distance / 10, (int)distance % 10);
   char footer[100] = "<span><a href='/update'>OTA</a></span>";
@@ -184,7 +215,8 @@ void setup() {
   mqtt.setCallback(handleMqttData);
 
   ntpClient.begin();
-  ntpClient.setTimeOffset(3);
+  ntpClient.setTimeOffset(3600*3);
+  ntp_update_cb();
   
   os_timer_disarm(&mqtt_timer);
   os_timer_setfn(&mqtt_timer, (os_timer_func_t *)mqtt_publish_data_cb, NULL);
